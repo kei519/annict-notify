@@ -6,6 +6,7 @@ use std::{
 use diesel::{Connection, PgConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 
+mod discord;
 mod schema;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
@@ -16,6 +17,11 @@ pub async fn main() -> Result<()> {
     // 反映されていないマイグレーションの実行
     let mut conn = PgConnection::establish(&get_env("DATABASE_URL")?)?;
     conn.run_pending_migrations(MIGRATIONS)?;
+
+    let (discord_monitor_task, http) = discord::start().await?;
+    let notify_task = discord::notify(http);
+
+    tokio::try_join!(discord_monitor_task, notify_task)?;
 
     Ok(())
 }
