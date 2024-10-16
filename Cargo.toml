@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 dotenv = "*"
 tokio = { version = "*", features = ["rt-multi-thread", "macros"] }
+tracing = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
