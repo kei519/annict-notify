@@ -14,3 +14,5 @@ CREATE TABLE subscribers (
     end_cursor TEXT,
     last_activity_date TIMESTAMP (0) WITH TIME ZONE
 );
+
+CREATE UNIQUE INDEX user_and_guild ON subscribers (user_id, guild_id);
