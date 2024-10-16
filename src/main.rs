@@ -1,9 +1,9 @@
-use std::env;
+use std::process::ExitCode;
 
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
     // ロガーの設定
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| env!("CARGO_CRATE_NAME").into()))
@@ -13,6 +13,5 @@ async fn main() {
     // .env の読み込み
     dotenv::dotenv().ok();
 
-    let envvar = env::var("ENV_VAR").expect("環境変数 `ENV_VAR` を設定してください");
-    println!("{}", envvar);
+    annict_notify::main().await.into()
 }
