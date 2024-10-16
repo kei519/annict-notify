@@ -1,13 +1,14 @@
-use std::env;
+use std::{env, error::Error};
 
 mod schema;
 
-pub async fn main() -> u8 {
+pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+
+pub async fn main() -> Result<()> {
     let Ok(envvar) = env::var("ENV_VAR") else {
-        tracing::error!("環境変数 `ENV_VAR` を設定してください");
-        return 1;
+        return Err("環境変数 `ENV_VAR` を設定してください".into());
     };
     println!("{}", envvar);
 
-    0
+    Ok(())
 }

@@ -13,5 +13,10 @@ async fn main() -> ExitCode {
     // .env の読み込み
     dotenv::dotenv().ok();
 
-    annict_notify::main().await.into()
+    if let Err(e) = annict_notify::main().await {
+        tracing::error!("{}", e);
+        1.into()
+    } else {
+        0.into()
+    }
 }
