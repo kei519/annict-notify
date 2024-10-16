@@ -1,6 +1,7 @@
 use std::env;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // .env の読み込み
     dotenv::dotenv().ok();
 
