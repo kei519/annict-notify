@@ -57,9 +57,11 @@ impl EventHandler for Handler {
             return;
         };
 
-        match interaction.data.name.as_str() {
+        if let Err(e) = match interaction.data.name.as_str() {
             notify::NAME => notify::handle(&ctx, &interaction).await,
-            cmd_name => tracing::debug!("不明なコマンド {} を受信", cmd_name),
+            cmd_name => Err(format!("不明なコマンド `{}` を受信", cmd_name).into()),
+        } {
+            tracing::warn!("{}", e);
         }
     }
 }

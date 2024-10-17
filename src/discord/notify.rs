@@ -1,7 +1,9 @@
 use serenity::all::{
     CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
-    CreateInteractionResponse, CreateInteractionResponseMessage, Permissions,
+    CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable, Permissions,
 };
+
+use crate::{db, Result};
 
 pub(super) const NAME: &str = "notify";
 
@@ -17,21 +19,36 @@ pub(super) fn register() -> CreateCommand {
         .add_option(option)
 }
 
-pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) {
+pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) -> Result<()> {
     let response = CreateInteractionResponseMessage::new();
 
-    let response = if let Some(_guild) = &interaction.guild_id {
+    let response = if let Some(guild) = &interaction.guild_id {
         // サーバー内の場合
-        todo!("通知用チャンネル登録処理")
+        let channel = interaction
+            .data
+            .options
+            .first()
+            // このコマンドが引数を受け付けた場合、その値はチャンネルであることが決まっているため、
+            // この unwrap は必ず成功する
+            .map(|opt| opt.value.as_channel_id().unwrap())
+            .unwrap_or_else(|| interaction.channel_id);
+
+        // TODO: チャンネルの変更が伴う場合は、確認を行う
+        let mut conn = db::connect()?;
+        db::insert_or_update_channel(&mut conn, guild.get(), channel.get())?;
+
+        response.content(format!(
+            "通知用チャンネルを {} に設定しました",
+            channel.mention()
+        ))
     } else {
         // DM の場合
         response.content("この操作はサーバー内で行ってください")
     };
 
-    if let Err(e) = interaction
+    interaction
         .create_response(&ctx.http, CreateInteractionResponse::Message(response))
-        .await
-    {
-        tracing::warn!("{}", e);
-    }
+        .await?;
+
+    Ok(())
 }
