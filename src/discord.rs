@@ -2,12 +2,14 @@ use std::{future::Future, sync::Arc, time::Duration};
 
 use regex::Regex;
 use serenity::{
-    all::{Context, EventHandler, GatewayIntents, Http, Ready},
+    all::{Command, Context, EventHandler, GatewayIntents, Http, Interaction, Ready},
     Client,
 };
 use tokio::time;
 
 use crate::{get_env, Result};
+
+mod notify;
 
 /// Discord の イベントリスナーを開始させ、その [Future] と HTTP クライアント [Http] を返す。
 pub async fn start() -> Result<(impl Future<Output = Result<()>>, Arc<Http>)> {
@@ -35,8 +37,30 @@ pub struct Handler;
 
 #[serenity::async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _ctx: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         tracing::info!("Discord に {} として接続", ready.user.name);
+
+        // スラッシュコマンドの設定
+        match Command::set_global_commands(&ctx.http, vec![notify::register()]).await {
+            Ok(commands) => {
+                for command in commands {
+                    tracing::trace!("コマンド {:?} の設定", command)
+                }
+            }
+            Err(e) => tracing::warn!("{}", e),
+        }
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        tracing::trace!("interaction {:?} が作成されました", interaction);
+        let Interaction::Command(interaction) = interaction else {
+            return;
+        };
+
+        match interaction.data.name.as_str() {
+            notify::NAME => notify::handle(&ctx, &interaction).await,
+            cmd_name => tracing::debug!("不明なコマンド {} を受信", cmd_name),
+        }
     }
 }
 
