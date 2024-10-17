@@ -2,7 +2,7 @@ use std::{future::Future, sync::Arc, time::Duration};
 
 use regex::Regex;
 use serenity::{
-    all::{EventHandler, GatewayIntents, Http},
+    all::{Context, EventHandler, GatewayIntents, Http, Ready},
     Client,
 };
 use tokio::time;
@@ -34,7 +34,11 @@ pub async fn notify(_http: Arc<Http>) -> Result<()> {
 pub struct Handler;
 
 #[serenity::async_trait]
-impl EventHandler for Handler {}
+impl EventHandler for Handler {
+    async fn ready(&self, _ctx: Context, ready: Ready) {
+        tracing::info!("Discord に {} として接続", ready.user.name);
+    }
+}
 
 fn get_interval() -> Result<Duration> {
     let duration = get_env("NOTIFICATION_INTERVAL")?;
