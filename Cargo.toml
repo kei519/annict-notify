@@ -12,3 +12,4 @@ diesel = { version = "*", features = ["postgres", "chrono"] }
 diesel_migrations = "*"
 serenity = "*"
 regex = "*"
+chrono = { version = "*", features = ["serde"] }
