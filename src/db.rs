@@ -1,7 +1,7 @@
-use chrono::{DateTime, TimeZone};
+use chrono::{DateTime, Local, TimeZone};
 use diesel::{
-    query_dsl::methods::FilterDsl, Connection, ExpressionMethods, PgConnection, QueryResult,
-    RunQueryDsl,
+    query_dsl::methods::{FilterDsl, SelectDsl},
+    Connection, ExpressionMethods, PgConnection, QueryResult, RunQueryDsl,
 };
 
 use crate::{
@@ -88,4 +88,14 @@ pub fn get_subscribers_by_guild(
     subscribers::table
         .filter(subscribers::guild_id.eq(guild_id as i64))
         .load(conn)
+}
+
+pub fn get_last_activity_date(
+    conn: &mut PgConnection,
+    id: i32,
+) -> QueryResult<Option<DateTime<Local>>> {
+    subscribers::table
+        .select(subscribers::last_activity_date)
+        .filter(subscribers::id.eq(id))
+        .first(conn)
 }
