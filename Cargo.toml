@@ -10,7 +10,7 @@ tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter"] }
 diesel = { version = "*", features = ["postgres", "chrono"] }
 diesel_migrations = "*"
-serenity = "*"
+serenity = { version = "*", features = ["collector"] }
 regex = "*"
 chrono = { version = "*", features = ["serde"] }
 serde = { version = "*", features = ["derive"] }
