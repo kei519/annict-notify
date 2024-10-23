@@ -6,9 +6,9 @@ use std::{
 use diesel::{Connection, PgConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 
-mod db;
-mod discord;
-mod models;
+pub mod db;
+pub mod discord;
+pub mod models;
 mod schema;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
