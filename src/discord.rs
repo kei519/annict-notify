@@ -228,6 +228,7 @@ async fn notify_activity(
                 ))
                 .await;
             }
+            return;
         }
         ActivityItem::Record(record) => {
             // 『**タイトル**』
