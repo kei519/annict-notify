@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::{Insertable, Queryable};
 
+use crate::discord::NotifyFlag;
+
 use super::schema::*;
 
 #[derive(Debug, Queryable, Insertable, PartialEq, Eq)]
@@ -8,6 +10,10 @@ use super::schema::*;
 pub struct Channel {
     pub guild_id: i64,
     pub channel_id: i64,
+
+    #[diesel(serialize_as = i32)]
+    #[diesel(deserialize_as = i32)]
+    pub notify_flag: NotifyFlag,
 }
 
 #[derive(Debug, Queryable, PartialEq, Eq)]

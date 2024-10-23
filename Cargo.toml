@@ -17,3 +17,4 @@ serde = { version = "*", features = ["derive"] }
 serde_json = "*"
 custom_debug = "*"
 reqwest = { version = "*", features = ["json"] }
+bitflags = "*"

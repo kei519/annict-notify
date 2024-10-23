@@ -6,6 +6,8 @@ use serenity::all::{
 
 use crate::{db, Result};
 
+use super::NotifyFlag;
+
 pub(super) const NAME: &str = "notify";
 
 pub(super) fn register() -> CreateCommand {
@@ -47,7 +49,12 @@ pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) -> R
         ) {
             // TODO: チャンネルの変更が伴う場合は、確認を行う
             let mut conn = db::connect()?;
-            db::insert_or_update_channel(&mut conn, guild.get(), channel.get())?;
+            db::insert_or_update_channel(
+                &mut conn,
+                guild.get(),
+                channel.get(),
+                NotifyFlag::default(),
+            )?;
 
             response.content(format!(
                 "通知用チャンネルを {} に設定しました",

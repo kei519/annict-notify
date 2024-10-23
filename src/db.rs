@@ -5,6 +5,7 @@ use diesel::{
 };
 
 use crate::{
+    discord::NotifyFlag,
     get_env,
     models::{Channel, NewSubscriber, Subscriber},
     schema::*,
@@ -22,16 +23,18 @@ pub fn insert_or_update_channel(
     conn: &mut PgConnection,
     guild_id: u64,
     channel_id: u64,
+    notify_flag: NotifyFlag,
 ) -> QueryResult<Channel> {
     let new_chan = Channel {
         channel_id: channel_id as _,
         guild_id: guild_id as _,
+        notify_flag,
     };
     diesel::insert_into(channels::table)
-        .values(&new_chan)
-        .on_conflict(channels::guild_id)
+        .values(new_chan)
+        .on_conflict((channels::guild_id, channels::channel_id))
         .do_update()
-        .set(channels::channel_id.eq(new_chan.channel_id))
+        .set(channels::notify_flag.eq(notify_flag.bits()))
         .get_result(conn)
 }
 

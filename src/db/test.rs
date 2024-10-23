@@ -3,7 +3,7 @@ use std::env;
 use chrono::{DateTime, Local};
 use diesel::{Connection, PgConnection, QueryResult};
 
-use crate::{db::get_last_activity_date, Result};
+use crate::{db::get_last_activity_date, discord::NotifyFlag, Result};
 
 use super::{
     connect, get_channels, get_subscribers_by_guild, insert_or_update_channel,
@@ -24,17 +24,20 @@ fn test<R>(f: impl FnOnce(&mut PgConnection) -> QueryResult<R>) -> Result<R> {
 #[test]
 fn channels_test() -> Result<()> {
     test(|conn| {
-        let channel = insert_or_update_channel(conn, 1, 1)?;
+        let channel = insert_or_update_channel(conn, 1, 32, NotifyFlag::default())?;
         assert_eq!(channel.guild_id, 1);
-        assert_eq!(channel.channel_id, 1);
+        assert_eq!(channel.channel_id, 32);
+        assert_eq!(channel.notify_flag, NotifyFlag::default());
 
         let channels = get_channels(conn)?;
         assert_eq!(channels.len(), 1);
         assert_eq!(channels[0], channel);
 
-        let channel = insert_or_update_channel(conn, 1, 32)?;
+        let flag = NotifyFlag::RECORD | NotifyFlag::REVIEW | NotifyFlag::WITH_COMMENT;
+        let channel = insert_or_update_channel(conn, 1, 32, flag)?;
         assert_eq!(channel.guild_id, 1);
         assert_eq!(channel.channel_id, 32);
+        assert_eq!(channel.notify_flag, flag);
 
         let channels = get_channels(conn)?;
         assert_eq!(channels.len(), 1);

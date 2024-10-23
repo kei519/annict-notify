@@ -1,5 +1,6 @@
 use std::{future::Future, sync::Arc, time::Duration};
 
+use bitflags::bitflags;
 use regex::Regex;
 use serenity::{
     all::{
@@ -17,6 +18,46 @@ use crate::{
 
 mod annict;
 mod notify;
+
+bitflags! {
+    /// 通知するアクティビティの種類を表すフラグ。
+    pub struct NotifyFlag: i32 {
+        /// 感想なしのアクティビティ。
+        const WITHOUT_COMMENT = 1 << 0;
+
+        /// 感想ありのアクティビティ。
+        const WITH_COMMENT = 1 << 1;
+
+        /// ステータス更新。
+        const STATUS = 1 << 2;
+
+        /// レコード (エピソードの記録)。
+        const RECORD = 1 << 3;
+
+        /// レビュー (作品の記録)。
+        const REVIEW = 1 << 4;
+    }
+}
+
+impl Default for NotifyFlag {
+    fn default() -> Self {
+        NotifyFlag::all()
+    }
+}
+
+impl From<NotifyFlag> for i32 {
+    fn from(value: NotifyFlag) -> Self {
+        value.bits
+    }
+}
+
+impl TryFrom<i32> for NotifyFlag {
+    type Error = &'static str;
+
+    fn try_from(value: i32) -> std::result::Result<Self, Self::Error> {
+        Self::from_bits(value).ok_or("unknown value")
+    }
+}
 
 /// Discord の イベントリスナーを開始させ、その [Future] と HTTP クライアント [Http] を返す。
 pub async fn start() -> Result<(impl Future<Output = Result<()>>, Arc<Http>)> {

@@ -1,9 +1,10 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    channels (guild_id) {
+    channels (guild_id, channel_id) {
         guild_id -> Int8,
         channel_id -> Int8,
+        notify_flag -> Int4,
     }
 }
 
