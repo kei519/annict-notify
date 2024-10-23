@@ -9,6 +9,7 @@ use tokio::time;
 
 use crate::{get_env, Result};
 
+mod annict;
 mod notify;
 
 /// Discord の イベントリスナーを開始させ、その [Future] と HTTP クライアント [Http] を返す。
@@ -41,7 +42,9 @@ impl EventHandler for Handler {
         tracing::info!("Discord に {} として接続", ready.user.name);
 
         // スラッシュコマンドの設定
-        match Command::set_global_commands(&ctx.http, vec![notify::register()]).await {
+        match Command::set_global_commands(&ctx.http, vec![notify::register(), annict::register()])
+            .await
+        {
             Ok(commands) => {
                 for command in commands {
                     tracing::trace!("コマンド {:?} の設定", command)
@@ -59,6 +62,7 @@ impl EventHandler for Handler {
 
         if let Err(e) = match interaction.data.name.as_str() {
             notify::NAME => notify::handle(&ctx, &interaction).await,
+            annict::NAME => annict::handle(&ctx, &interaction).await,
             cmd_name => Err(format!("不明なコマンド `{}` を受信", cmd_name).into()),
         } {
             tracing::warn!("{}", e);
