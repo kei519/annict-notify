@@ -38,6 +38,18 @@ pub fn insert_or_update_channel(
         .get_result(conn)
 }
 
+pub fn remove_channel(
+    conn: &mut PgConnection,
+    guild_id: u64,
+    channel_id: u64,
+) -> QueryResult<bool> {
+    let num_deleted = diesel::delete(channels::table)
+        .filter(channels::channel_id.eq(channel_id as i64))
+        .filter(channels::guild_id.eq(guild_id as i64))
+        .execute(conn)?;
+    Ok(num_deleted >= 1)
+}
+
 pub fn get_channels(conn: &mut PgConnection) -> QueryResult<Vec<Channel>> {
     channels::table.load(conn)
 }

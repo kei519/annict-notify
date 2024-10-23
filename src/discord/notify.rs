@@ -74,11 +74,14 @@ pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) -> R
     let num_options = options.len() as _;
     let select_menu = CreateSelectMenu::new("", CreateSelectMenuKind::String { options })
         .placeholder("通知するアクティビティの種類")
-        .min_values(1)
+        .min_values(0)
         .max_values(num_options);
 
     let response = CreateInteractionResponseFollowup::new()
-        .content("通知するアクティビティの種類を選択してください")
+        .content(
+            "通知するアクティビティの種類を選択してください\n\
+                1つも選択しない場合は通知設定を解除します",
+        )
         .select_menu(select_menu);
 
     let message = interaction.create_followup(&ctx.http, response).await?;
@@ -94,6 +97,28 @@ pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) -> R
         // セレクトメニューの作り方的にここには来ない
         unreachable!("unexpected component interaction data");
     };
+
+    // 何も選択されなかった場合は通知解除
+    if selected_flags.is_empty() {
+        let response = CreateInteractionResponseMessage::new();
+
+        let mut conn = db::connect()?;
+        let response = if db::remove_channel(&mut conn, guild.get(), channel.get())? {
+            // TODO: 解除しても良いか確認
+            response.content(format!("{} の通知設定を解除しました", channel.mention()))
+        } else {
+            response
+                .content(format!(
+                    "{} は通知設定されていないため、なにもしませんでした",
+                    channel.mention()
+                ))
+                .ephemeral(true)
+        };
+        component
+            .create_response(&ctx.http, CreateInteractionResponse::Message(response))
+            .await?;
+        return Ok(());
+    }
 
     let mut notify_flag = NotifyFlag::empty();
     for selected in selected_flags {
