@@ -11,6 +11,9 @@ use crate::{
     Result,
 };
 
+#[cfg(test)]
+mod test;
+
 pub fn connect() -> Result<PgConnection> {
     Ok(PgConnection::establish(&get_env("DATABASE_URL")?)?)
 }
