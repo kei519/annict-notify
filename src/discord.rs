@@ -207,7 +207,8 @@ async fn notify_activity(
 ) {
     let mut author = CreateEmbedAuthor::new(member.display_name())
         .url(format!("https://annict.com/@{}", username));
-    if let Some(url) = member.avatar_url() {
+    // Member.avator_url() はサーバー限定のアバター画像であることもある
+    if let Some(url) = member.avatar_url().or_else(|| member.user.avatar_url()) {
         author = author.icon_url(url);
     }
     let author = author;
