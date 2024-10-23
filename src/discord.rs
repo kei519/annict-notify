@@ -1,4 +1,4 @@
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use bitflags::bitflags;
 use regex::Regex;
@@ -79,8 +79,20 @@ pub async fn notify(http: Arc<Http>) -> Result<()> {
     loop {
         tracing::trace!("loop!");
 
-        'chan_loop: for channel in db::get_channels(&mut conn)? {
-            for subscriber in db::get_subscribers_by_guild(&mut conn, channel.guild_id as _)? {
+        let mut channels = HashMap::new();
+        for chan in db::get_channels(&mut conn)? {
+            let guild_id = GuildId::new(chan.guild_id as _);
+            if !channels.contains_key(&guild_id) {
+                channels.insert(guild_id, vec![]);
+            }
+            channels.get_mut(&guild_id).and_then(|map| {
+                map.push((ChannelId::new(chan.channel_id as _), chan.notify_flag));
+                Some(())
+            });
+        }
+
+        'chan_loop: for (guild_id, channels_and_flags) in channels {
+            for subscriber in db::get_subscribers_by_guild(&mut conn, guild_id.get())? {
                 let member = match http
                     .get_member(
                         GuildId::new(subscriber.guild_id as _),
@@ -126,7 +138,7 @@ pub async fn notify(http: Arc<Http>) -> Result<()> {
                 for activity in crate::annict::get_new_activities(&subscriber).await? {
                     notify_activity(
                         &http,
-                        ChannelId::new(channel.channel_id as _),
+                        &channels_and_flags,
                         &member,
                         &subscriber.annict_name,
                         activity,
@@ -200,7 +212,7 @@ fn get_interval() -> Result<Duration> {
 
 async fn notify_activity(
     http: &Http,
-    channel_id: ChannelId,
+    channels_and_flags: &Vec<(ChannelId, NotifyFlag)>,
     member: &Member,
     username: &str,
     activity: ActivityItem,
@@ -215,13 +227,14 @@ async fn notify_activity(
 
     let mut embed = CreateEmbed::new().author(author);
 
+    let mut activity_flag = NotifyFlag::empty();
     match activity {
         ActivityItem::MultipleRecord(records) => {
             for edge in records.records.edges {
                 // NOTE: ここ理解する
                 Box::pin(notify_activity(
                     http,
-                    channel_id,
+                    channels_and_flags,
                     member,
                     username,
                     ActivityItem::Record(edge.node),
@@ -231,6 +244,8 @@ async fn notify_activity(
             return;
         }
         ActivityItem::Record(record) => {
+            activity_flag |= NotifyFlag::RECORD;
+
             // 『**タイトル**』
             let mut desc = format!("『**{}**』", record.work.title);
 
@@ -264,12 +279,19 @@ async fn notify_activity(
             if let Some(comment) = record.comment {
                 if !comment.is_empty() {
                     desc = format!("{}\n{}", desc, comment);
+                    activity_flag |= NotifyFlag::WITH_COMMENT;
+                } else {
+                    activity_flag |= NotifyFlag::WITHOUT_COMMENT;
                 }
+            } else {
+                activity_flag |= NotifyFlag::WITHOUT_COMMENT;
             }
 
             embed = embed.description(desc);
         }
         ActivityItem::Review(review) => {
+            activity_flag |= NotifyFlag::REVIEW;
+
             embed = embed.field("タイトル", review.work.title, false);
 
             if let Some(rating) = review.rating_overall_state {
@@ -297,9 +319,14 @@ async fn notify_activity(
                     review.body.chars().take(1024).collect::<String>(),
                     false,
                 );
+                activity_flag |= NotifyFlag::WITH_COMMENT;
+            } else {
+                activity_flag |= NotifyFlag::WITHOUT_COMMENT;
             }
         }
         ActivityItem::Status(status) => {
+            activity_flag |= NotifyFlag::STATUS;
+
             // 『**タイトル**』
             // 見た/見たい/一時中断/...
             embed = embed.description(format!("『**{}**』\n{}", status.work.title, status.state));
@@ -309,5 +336,11 @@ async fn notify_activity(
     let embed = embed;
 
     let msg = CreateMessage::new().add_embed(embed);
-    channel_id.send_message(http, msg).await.unwrap();
+    for channel_id in channels_and_flags
+        .iter()
+        .filter(|(_, flag)| flag.contains(activity_flag))
+        .map(|(chan, _)| chan)
+    {
+        channel_id.send_message(http, msg.clone()).await.unwrap();
+    }
 }
