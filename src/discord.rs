@@ -2,12 +2,18 @@ use std::{future::Future, sync::Arc, time::Duration};
 
 use regex::Regex;
 use serenity::{
-    all::{Command, Context, EventHandler, GatewayIntents, Http, Interaction, Ready},
+    all::{
+        ChannelId, Command, Context, CreateEmbed, CreateEmbedAuthor, CreateMessage, EventHandler,
+        GatewayIntents, GuildId, Http, HttpError, Interaction, Member, Ready, UserId,
+    },
     Client,
 };
 use tokio::time;
 
-use crate::{get_env, Result};
+use crate::{
+    annict::{ActivityItem, RatingState},
+    db, get_env, Result,
+};
 
 mod annict;
 mod notify;
@@ -25,11 +31,70 @@ pub async fn start() -> Result<(impl Future<Output = Result<()>>, Arc<Http>)> {
 }
 
 /// 通知に用いる [Http] クライアントを受け取り、通知タスクを開始する。
-pub async fn notify(_http: Arc<Http>) -> Result<()> {
+pub async fn notify(http: Arc<Http>) -> Result<()> {
     let interval = get_interval()?;
     tracing::info!("更新間隔: {} 秒", interval.as_secs());
+    let mut conn = db::connect()?;
     loop {
         tracing::trace!("loop!");
+
+        'chan_loop: for channel in db::get_channels(&mut conn)? {
+            for subscriber in db::get_subscribers_by_guild(&mut conn, channel.guild_id as _)? {
+                let member = match http
+                    .get_member(
+                        GuildId::new(subscriber.guild_id as _),
+                        UserId::new(subscriber.user_id as _),
+                    )
+                    .await
+                {
+                    Ok(mem) => mem,
+                    Err(serenity::Error::Http(HttpError::UnsuccessfulRequest(e))) => {
+                        match e.error.message.to_ascii_lowercase().as_str() {
+                            "unknown member" => {
+                                tracing::info!(
+                                    "サーバー (ID = {}) にユーザー (ID = {}) が所属していません",
+                                    subscriber.guild_id,
+                                    subscriber.user_id,
+                                );
+                                continue;
+                            }
+                            "unknown user" => {
+                                tracing::info!(
+                                    "ユーザー (ID = {}) が見つかりませんでした",
+                                    subscriber.user_id,
+                                );
+                                continue;
+                            }
+                            "unknown guild" => {
+                                tracing::info!(
+                                    "サーバー (ID = {}) が見つかりませんでした",
+                                    subscriber.guild_id,
+                                );
+                                continue 'chan_loop;
+                            }
+                            _ => {
+                                return Err(serenity::Error::Http(HttpError::UnsuccessfulRequest(
+                                    e,
+                                ))
+                                .into())
+                            }
+                        }
+                    }
+                    Err(e) => return Err(e.into()),
+                };
+                for activity in crate::annict::get_new_activities(&subscriber).await? {
+                    notify_activity(
+                        &http,
+                        ChannelId::new(channel.channel_id as _),
+                        &member,
+                        &subscriber.annict_name,
+                        activity,
+                    )
+                    .await;
+                }
+            }
+        }
+
         time::sleep(interval).await;
     }
 }
@@ -90,4 +155,116 @@ fn get_interval() -> Result<Duration> {
         "h" | "hour" => Duration::from_secs(num * 60 * 60),
         _ => unreachable!("正規表現の不正"),
     })
+}
+
+async fn notify_activity(
+    http: &Http,
+    channel_id: ChannelId,
+    member: &Member,
+    username: &str,
+    activity: ActivityItem,
+) {
+    let mut author = CreateEmbedAuthor::new(member.display_name())
+        .url(format!("https://annict.com/@{}", username));
+    if let Some(url) = member.avatar_url() {
+        author = author.icon_url(url);
+    }
+    let author = author;
+
+    let mut embed = CreateEmbed::new().author(author);
+
+    match activity {
+        ActivityItem::MultipleRecord(records) => {
+            for edge in records.records.edges {
+                // NOTE: ここ理解する
+                Box::pin(notify_activity(
+                    http,
+                    channel_id,
+                    member,
+                    username,
+                    ActivityItem::Record(edge.node),
+                ))
+                .await;
+            }
+        }
+        ActivityItem::Record(record) => {
+            // 『**タイトル**』
+            let mut desc = format!("『**{}**』", record.work.title);
+
+            // 『**タイトル**』
+            // 第n話
+            let has_number = if let Some(num_text) = record.episode.number_text {
+                desc = format!("{}\n{}", desc, num_text);
+                true
+            } else if let Some(num) = record.episode.number {
+                desc = format!("{}\n第{}話", desc, num);
+                true
+            } else {
+                false
+            };
+            // 『**タイトル**』
+            // 第n話「サブタイトル」
+            if let Some(title) = record.episode.title {
+                if has_number {
+                    desc = format!("{}「{}」", desc, title);
+                } else {
+                    desc = format!("{}\n「{}」", desc, title);
+                }
+            }
+
+            if let Some(rating) = record.rating_state {
+                embed = embed.colour(rating.to_colour());
+            } else {
+                embed = embed.color(RatingState::Average.to_colour());
+            }
+
+            if let Some(comment) = record.comment {
+                if !comment.is_empty() {
+                    desc = format!("{}\n{}", desc, comment);
+                }
+            }
+
+            embed = embed.description(desc);
+        }
+        ActivityItem::Review(review) => {
+            embed = embed.field("タイトル", review.work.title, false);
+
+            if let Some(rating) = review.rating_overall_state {
+                embed = embed.field("全体", rating.to_string(), true);
+                embed = embed.colour(rating.to_colour());
+            } else {
+                embed = embed.colour(RatingState::Average.to_colour());
+            }
+            if let Some(rating) = review.rating_animation_state {
+                embed = embed.field("映像", rating.to_string(), true);
+            }
+            if let Some(rating) = review.rating_character_state {
+                embed = embed.field("キャラクター", rating.to_string(), true);
+            }
+            if let Some(rating) = review.rating_story_state {
+                embed = embed.field("ストーリー", rating.to_string(), true);
+            }
+            if let Some(rating) = review.rating_music_state {
+                embed = embed.field("音楽", rating.to_string(), true);
+            }
+
+            if !review.body.is_empty() {
+                embed = embed.field(
+                    "感想",
+                    review.body.chars().take(1024).collect::<String>(),
+                    false,
+                );
+            }
+        }
+        ActivityItem::Status(status) => {
+            // 『**タイトル**』
+            // 見た/見たい/一時中断/...
+            embed = embed.description(format!("『**{}**』\n{}", status.work.title, status.state));
+            embed = embed.colour(status.state.to_colour());
+        }
+    }
+    let embed = embed;
+
+    let msg = CreateMessage::new().add_embed(embed);
+    channel_id.send_message(http, msg).await.unwrap();
 }
