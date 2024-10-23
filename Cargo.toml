@@ -13,3 +13,7 @@ diesel_migrations = "*"
 serenity = "*"
 regex = "*"
 chrono = { version = "*", features = ["serde"] }
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+custom_debug = "*"
+reqwest = { version = "*", features = ["json"] }

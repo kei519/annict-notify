@@ -6,6 +6,7 @@ use std::{
 use diesel::{Connection, PgConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 
+pub mod annict;
 pub mod db;
 pub mod discord;
 pub mod models;
