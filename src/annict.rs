@@ -50,6 +50,15 @@ pub async fn get_new_activities(subscriber: &Subscriber) -> Result<Vec<ActivityI
         }
         Response::Errors(e) => return Err(format!("{:?}", e).into()),
     };
+
+    // before 探索に使うカーソル
+    // after のアクティビティがない場合は before=None で探索すればよいし、
+    // そうでなければ、after のアクティビティの最新のものより古いものを見れば良い
+    let mut cursor = activity_connection
+        .edges
+        .first()
+        .map(|edge| edge.cursor.clone());
+
     let after_activities: Vec<_> = activity_connection
         .edges
         .into_iter()
@@ -69,13 +78,12 @@ pub async fn get_new_activities(subscriber: &Subscriber) -> Result<Vec<ActivityI
         return Ok(after_activities);
     }
 
-    // end_cursor が Some だった場合、データの削除等が起こったときに取得できていない
+    // 元々の end_cursor が Some だった場合、データの削除等が起こったときに取得できていない
     // アクティビティがある可能性があるので、過去も振り返って確認する
     // 既に見たアクティビティあるので、last_activity_date は必ず Some => unwrap は必ず成功
     let last_activity_date = db::get_last_activity_date(&mut conn, subscriber.id)?.unwrap();
     let mut end_cursor = activity_connection.page_info.end_cursor;
     let mut reversed_before_activities = vec![];
-    let mut cursor = activity_connection.page_info.start_cursor;
     loop {
         let res =
             query::query_with_before(&subscriber.annict_name, Some(1), cursor.as_deref()).await?;
@@ -113,7 +121,14 @@ pub async fn get_new_activities(subscriber: &Subscriber) -> Result<Vec<ActivityI
         &mut conn,
         subscriber.id,
         end_cursor.as_deref(),
-        activities.last().map(|act| act.created_at()),
+        Some(
+            activities
+                .last()
+                .map(|act| act.created_at())
+                // アクティビティが消えても、
+                // 過去のアクティビティよりも古いアクティビティが生えることは無い
+                .unwrap_or_else(|| last_activity_date),
+        ),
     )?;
 
     Ok(activities)
