@@ -1,6 +1,7 @@
 use serenity::all::{
-    CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
-    CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable, Permissions,
+    ChannelType, CommandInteraction, CommandOptionType, Context, CreateCommand,
+    CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseMessage, Mentionable,
+    Permissions,
 };
 
 use crate::{db, Result};
@@ -33,14 +34,30 @@ pub(super) async fn handle(ctx: &Context, interaction: &CommandInteraction) -> R
             .map(|opt| opt.value.as_channel_id().unwrap())
             .unwrap_or_else(|| interaction.channel_id);
 
-        // TODO: チャンネルの変更が伴う場合は、確認を行う
-        let mut conn = db::connect()?;
-        db::insert_or_update_channel(&mut conn, guild.get(), channel.get())?;
+        // チャンネルがテキストチャンネルに類するか確認
+        // サーバー内のチャンネルであることは分かっているので、unwrap は成功
+        let guild_channel = channel.to_channel(&ctx.http).await?.guild().unwrap();
+        if matches!(
+            guild_channel.kind,
+            ChannelType::Text
+                | ChannelType::News
+                | ChannelType::NewsThread
+                | ChannelType::PublicThread
+                | ChannelType::PrivateThread
+        ) {
+            // TODO: チャンネルの変更が伴う場合は、確認を行う
+            let mut conn = db::connect()?;
+            db::insert_or_update_channel(&mut conn, guild.get(), channel.get())?;
 
-        response.content(format!(
-            "通知用チャンネルを {} に設定しました",
-            channel.mention()
-        ))
+            response.content(format!(
+                "通知用チャンネルを {} に設定しました",
+                channel.mention()
+            ))
+        } else {
+            response
+                .content("通知用チャンネルはテキストチャンネルに設定してください")
+                .ephemeral(true)
+        }
     } else {
         // DM の場合
         response.content("この操作はサーバー内で行ってください")
