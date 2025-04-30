@@ -82,13 +82,10 @@ pub async fn notify(http: Arc<Http>) -> Result<()> {
         let mut channels = HashMap::new();
         for chan in db::get_channels(&mut conn)? {
             let guild_id = GuildId::new(chan.guild_id as _);
-            if !channels.contains_key(&guild_id) {
-                channels.insert(guild_id, vec![]);
-            }
-            channels.get_mut(&guild_id).and_then(|map| {
-                map.push((ChannelId::new(chan.channel_id as _), chan.notify_flag));
-                Some(())
-            });
+            channels
+                .entry(guild_id)
+                .or_insert_with(Vec::new)
+                .push((ChannelId::new(chan.channel_id as _), chan.notify_flag));
         }
 
         'chan_loop: for (guild_id, channels_and_flags) in channels {
