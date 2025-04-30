@@ -275,7 +275,13 @@ async fn notify_activity(
 
             if let Some(comment) = record.comment {
                 if !comment.is_empty() {
-                    desc = format!("{}\n{}", desc, comment);
+                    // TODO: ||***|| をあまりうまく処理できていないが、そもそも discord 上での
+                    //       最適解が分かっていない
+                    desc = format!(
+                        "{}\n\n__**感想**__\n||{}||",
+                        desc,
+                        comment.replace("||", "|\\| "),
+                    );
                     activity_flag |= NotifyFlag::WITH_COMMENT;
                 } else {
                     activity_flag |= NotifyFlag::WITHOUT_COMMENT;
@@ -311,9 +317,21 @@ async fn notify_activity(
             }
 
             if !review.body.is_empty() {
+                // TODO: ||***|| をあまりうまく処理できていないが、そもそも discord 上での最適解が
+                //       分かっていない
                 embed = embed.field(
                     "感想",
-                    review.body.chars().take(1024).collect::<String>(),
+                    format!(
+                        "||{}||",
+                        review
+                            .body
+                            .replace("||", "|\\| ")
+                            .chars()
+                            // 1024 文字が上限だが、ネタバレ対策で 4 * '|' を使うため、
+                            // 1020 文字だけ取り出す
+                            .take(1020)
+                            .collect::<String>(),
+                    ),
                     false,
                 );
                 activity_flag |= NotifyFlag::WITH_COMMENT;
